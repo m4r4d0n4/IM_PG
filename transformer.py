@@ -15,6 +15,7 @@ from sklearn.metrics import confusion_matrix
 import torch.utils.data as data
 import torchvision
 from torchvision.transforms import ToTensor
+import torchvision.transforms as transforms
 torch.cuda.is_available()
 
 # Hyperparameters:
@@ -27,15 +28,20 @@ IMG_SIZE = 128
 patch_size = 16
 num_classes = 2
 
+transform = transforms.Compose([
+    transforms.Resize((128, 128)),
+    transforms.ToTensor()
+])
+
 # Tensor Transforms (with Augmentation) and Pytorch Preprocessing:
-train_ds = torchvision.datasets.ImageFolder("dataset/train", transform=ToTensor())
-valid_ds = torchvision.datasets.ImageFolder("dataset/val", transform=ToTensor())
-test_ds = torchvision.datasets.ImageFolder("dataset/test", transform=ToTensor())
+train_ds = torchvision.datasets.ImageFolder("dataset/train", transform=transform)
+valid_ds = torchvision.datasets.ImageFolder("dataset/val", transform=transform)
+test_ds = torchvision.datasets.ImageFolder("dataset/test", transform=transform)
 
 # Data Loaders:
-train_loader = data.DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=4)
-valid_loader = data.DataLoader(valid_ds, batch_size=batch_size, shuffle=True,  num_workers=4)
-test_loader  = data.DataLoader(test_ds, batch_size=batch_size, shuffle=True, num_workers=4)
+train_loader = data.DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=0)
+valid_loader = data.DataLoader(valid_ds, batch_size=batch_size, shuffle=True,  num_workers=0)
+test_loader  = data.DataLoader(test_ds, batch_size=batch_size, shuffle=True, num_workers=0)
 
 # Training device:
 device = 'cuda'
@@ -62,7 +68,7 @@ for epoch in range(epochs):
     for data, label in tqdm(train_loader):
         data = data.to(device)
         label = label.to(device)
-
+        #print(data.shape)
         output = model(data)
         loss = criterion(output, label)
 
@@ -100,7 +106,7 @@ torch.save(model.state_dict(), PATH)
 # load saved model:
 PATH = "epochs"+"_"+str(epochs)+"_"+"img"+"_"+str(IMG_SIZE)+"_"+"patch"+"_"+str(patch_size)+"_"+"lr"+"_"+str(lr)+".pt"
 efficient_transformer = Linformer(dim=128, seq_len=49+1, depth=12, heads=8, k=64)
-model = ViT(image_size=224, patch_size=32, num_classes=2, dim=128 ,transformer=efficient_transformer, channels=3)
+model = ViT(image_size=128, patch_size=32, num_classes=2, dim=128 ,transformer=efficient_transformer, channels=3)
 model.load_state_dict(torch.load(PATH))
 
 # Performance on Valid/Test Data
