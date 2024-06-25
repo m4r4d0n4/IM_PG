@@ -79,8 +79,8 @@ class Vgg16Model():
     
 
     def train(self, train_generator, validation_generator):
-        # Detiene el entrenamiento si la precision de la validacion no mejora en despues de 2 epocas
-        early_stop = EarlyStopping(monitor="val_loss", patience=2, verbose=1)
+        # Detiene el entrenamiento si la precision de la validacion no mejora en despues de 4 epocas
+        early_stop = EarlyStopping(monitor="val_loss", patience=4, verbose=1)
 
         # Guarda el modelo con mejor precision en la validacion
         mcp = ModelCheckpoint('modelVVG.h5', verbose=1)
