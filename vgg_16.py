@@ -125,7 +125,7 @@ def load_data(data_good, data_bad):
     # Create the real-time image data generator -> Apply normalization + Train Test Split (20% Validation and 80% Train)
     datagen = ImageDataGenerator(rescale=1./255., validation_split=0.20)
 
-    batch_size = 10 # Lo ponen a 128 pero con 100 imagenes no puedo ponerlo a tanto!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    batch_size = 128 # Lo ponen a 128 pero con 100 imagenes no puedo ponerlo a tanto!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     # Training data generator
     train_generator = datagen.flow_from_dataframe(
