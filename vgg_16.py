@@ -9,9 +9,8 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
 from sklearn.model_selection import train_test_split
 import numpy as np
-
-
-
+import os
+import tensorflow as tf
 
 ## MODEL VGG16
 class Vgg16Model():
@@ -70,7 +69,7 @@ class Vgg16Model():
         drop1  = Dropout(0.5)(dense1)
         dense2 = Dense(4096, activation="relu")(drop1)
         drop2  = Dropout(0.5)(dense2)
-        output = Dense(1, activation="sigmoid")(drop2)
+        output = Dense(2, activation="softmax")(drop2)
 
         vgg_16_model = Model(inputs=input, outputs=output)
         vgg_16_model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["accuracy"])
@@ -79,21 +78,18 @@ class Vgg16Model():
     
 
     def train(self, train_generator, validation_generator):
-        # Detiene el entrenamiento si la precision de la validacion no mejora en despues de 2 epocas
-        early_stop = EarlyStopping(monitor="val_loss", patience=2, verbose=1)
-
+        
         # Guarda el modelo con mejor precision en la validacion
-        mcp = ModelCheckpoint('modelVVG.h5', verbose=1)
+        mcp = ModelCheckpoint('ISIC-images/modelVVG.h5', verbose=1)
 
         # Parametros !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         train_steps = train_generator.n // train_generator.batch_size
         validation_steps = validation_generator.n // validation_generator.batch_size
-        epochs = 30
+        epochs = 200
 
         # Entrenamiento del modelo
-        return self.model.fit(train_generator, steps_per_epoch=train_steps, epochs=epochs, validation_data=validation_generator, validation_steps=validation_steps, verbose=1, callbacks=[mcp,early_stop])
-
-    
+        return self.model.fit(train_generator, steps_per_epoch=train_steps, epochs=epochs, validation_data=validation_generator, validation_steps=validation_steps, verbose=1, callbacks=[mcp])
+  
     def predict(self, data):
         return self.model.predict(data)
 
@@ -102,22 +98,26 @@ class Vgg16Model():
 
 
 ## DATA PROCESSING
-def load_data(data_good, data_bad):
-    # Combine the two DataFrames
-    combined_data = pd.concat([data_good, data_bad], ignore_index=True)
-
-    # Save the combined DataFrame to a new CSV file
-    combined_data.to_csv('dataset_nuria/metadata.csv', index=False)
-
+def load_data():
     # Create the DataFrame necessary for ImageDataGenerator
-    dataset_path = 'dataset_nuria/' # Cambiar ruta del archivo CSV !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    dataset_path = './ISIC-images/' # Cambiar ruta del archivo CSV !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     # Load the file with the labels
     data = pd.read_csv(dataset_path + 'metadata.csv')
     
     # Create the DataFrame with two columns -> image path | label (0:benign, 1:melanoma)
-    new_data = pd.DataFrame({'x_col': dataset_path + data['isic_id'] + '.jpg',
-                         'y_col': data['benign_malignant'].apply(lambda x: 'benign' if x == 'benign' else 'melanoma')}) 
+    class_map = {'nevus': "nevus", 'melanoma': "melanoma"}
+# Create the DataFrame with two columns -> image path | label (0:benign, 1:melanoma)
+    new_data = pd.DataFrame({
+        'x_col': data['isic_id'].apply(lambda x: os.path.join(dataset_path, x + '.jpg')),
+        'y_col': data['diagnosis'].apply(lambda x: class_map[x] if x in class_map else 3)
+    })
+    seed = 142
+    melanoma_data = new_data[new_data['y_col'] == "melanoma"].sample(n=3000, random_state=seed)
+    benign_data = new_data[new_data['y_col'] == "nevus"].sample(n=3000, random_state=seed)
+
+    # Combinar y mezclar los datos seleccionados
+    new_data = pd.concat([melanoma_data, benign_data]).sample(frac=1, random_state=seed).reset_index(drop=True)
 
     # Tarin Test Separation -> 90% Train and 10% Test
     train_data, test_data = train_test_split(new_data, test_size=0.10, random_state=42, stratify=new_data['y_col'])
@@ -125,7 +125,7 @@ def load_data(data_good, data_bad):
     # Create the real-time image data generator -> Apply normalization + Train Test Split (20% Validation and 80% Train)
     datagen = ImageDataGenerator(rescale=1./255., validation_split=0.20)
 
-    batch_size = 128 # Lo ponen a 128 pero con 100 imagenes no puedo ponerlo a tanto!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    batch_size = 64 # Lo ponen a 128 pero con 100 imagenes no puedo ponerlo a tanto!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     # Training data generator
     train_generator = datagen.flow_from_dataframe(
@@ -172,22 +172,20 @@ def main():
 
     # No se si hace falta para el dataset final -> tengo dos archivos csv porque me he descargado por separado las img benignas y las malignas -> concateno los csv !!!!!!!!!!!!!!!!!!!!!!!!!
     # Load data from the two CSV files
-    data_good = pd.read_csv('dataset_nuria/metadata_1.csv')
-    data_bad = pd.read_csv('dataset_nuria/metadata_2.csv')
-
-    train, validation, test = load_data(data_good, data_bad)
+    train, validation, test = load_data()
     
     print(test.labels)
 
     # For transfer learning
-    model = Vgg16Model(pretrained=True)
+    #model = Vgg16Model(pretrained=True)
 
     # For normal training
-    # model = Vgg16Model(pretrained=False)
+    model = Vgg16Model(pretrained=False)
 
     history = model.train(train, validation)
-    
+    #model = load_model('./ISIC-images/modelVVG.h5')
     ## TRAIN ACCURACY
+    '''
     train_accuracy = history.history['accuracy']
     val_accuracy = history.history['val_accuracy']
     train_loss = history.history['loss']
@@ -213,18 +211,32 @@ def main():
     plt.legend()
 
     plt.tight_layout()
+    plt.savefig("ISIC-images/fig1.png")
     plt.show()
-
+    '''
 
     # TEST SCORE
-    prediction = model.predict(test).argmax(axis=1)
-    test_labels = test.labels
-    test_confusion = confusion_matrix(test_labels, prediction)
-    test_accuracy = accuracy_score(test_labels, prediction, normalize=True, sample_weight=None)
-    print(test_confusion)
-    print(test_accuracy)
+    prediction = model.predict(test)
+    predicted_classes = np.argmax(prediction, axis=1)
+    print("TEST")
+    print(predicted_classes)
+    test_labels = np.array([test.labels])
+    print(test_labels)
+    y_pred = predicted_classes
+    y_true = test_labels
+    # Verdaderos Positivos (TP): Ambos son 1
+    TP = np.sum((y_true == 1) & (y_pred == 1))
 
-    print(classification_report(test.classes, prediction, zero_division=0))
+    # Verdaderos Negativos (TN): Ambos son 0
+    TN = np.sum((y_true == 0) & (y_pred == 0))
+
+    # Falsos Positivos (FP): y_true es 0 pero y_pred es 1
+    FP = np.sum((y_true == 0) & (y_pred == 1))
+
+    # Falsos Negativos (FN): y_true es 1 pero y_pred es 0
+    FN = np.sum((y_true == 1) & (y_pred == 0))
+    
+    print(f'TP: {TP}, TN: {TN}, FP: {FP}, FN: {FN}')
 
 
 if __name__ == "__main__":
