@@ -12,7 +12,7 @@ import numpy as np
 import os
 import tensorflow as tf
 
-## MODEL VGG16
+## MODEL0 VGG16
 class Vgg16Model():
 
     def __init__(self, input_shape=(224, 224, 3), pretrained=False):
@@ -31,39 +31,39 @@ class Vgg16Model():
             input = self._base_model.input
             output = self._base_model.output
         else:
-            # Image dimensions
+            # Dimensiones de las imagenes
             input = Input(self.input_shape) 
 
-            ## Convolutional Layers
-            # Block 1
+            ## Capas convolucionales
+            # Bloque 1
             conv1  = Conv2D(filters=64, kernel_size=(3,3), padding="same", activation="relu")(input)
             conv2  = Conv2D(filters=64, kernel_size=(3,3), padding="same", activation="relu")(conv1)
             pool1  = MaxPooling2D((2, 2))(conv2)
 
-            # Block 2
+            # Bloque 2
             conv3  = Conv2D(filters=128, kernel_size=(3,3), padding="same", activation="relu")(pool1)
             conv4  = Conv2D(filters=128, kernel_size=(3,3), padding="same", activation="relu")(conv3)
             pool2  = MaxPooling2D((2, 2))(conv4)
 
-            # Block 3
+            # Bloque 3
             conv5  = Conv2D(filters=256, kernel_size=(3,3), padding="same", activation="relu")(pool2)
             conv6  = Conv2D(filters=256, kernel_size=(3,3), padding="same", activation="relu")(conv5)
             conv7  = Conv2D(filters=256, kernel_size=(3,3), padding="same", activation="relu")(conv6)
             pool3  = MaxPooling2D((2, 2))(conv7)
 
-            # Block 4
+            # Bloque 4
             conv8  = Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu")(pool3)
             conv9  = Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu")(conv8)
             conv10 = Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu")(conv9)
             pool4  = MaxPooling2D((2, 2))(conv10)
 
-            # Block 5
+            # Bloque 5
             conv11 = Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu")(pool4)
             conv12 = Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu")(conv11)
             conv13 = Conv2D(filters=512, kernel_size=(3,3), padding="same", activation="relu")(conv12)
             output  = MaxPooling2D((2, 2))(conv13)
 
-        ## Dense Layers
+        ## Capas
         flat   = Flatten()(output)
         dense1 = Dense(4096, activation="relu")(flat)
         drop1  = Dropout(0.5)(dense1)
@@ -82,7 +82,7 @@ class Vgg16Model():
         # Guarda el modelo con mejor precision en la validacion
         mcp = ModelCheckpoint('ISIC-images/modelVVG.h5', verbose=1)
 
-        # Parametros !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # Parametros 
         train_steps = train_generator.n // train_generator.batch_size
         validation_steps = validation_generator.n // validation_generator.batch_size
         epochs = 200
@@ -97,17 +97,16 @@ class Vgg16Model():
 
 
 
-## DATA PROCESSING
+## PROCESAMIENTO DE LOS DATOS
 def load_data():
-    # Create the DataFrame necessary for ImageDataGenerator
-    dataset_path = './ISIC-images/' # Cambiar ruta del archivo CSV !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # Crear el DataFrame necesario para ImageDataGenerator
+    dataset_path = './ISIC-images/' 
 
-    # Load the file with the labels
+    # Cargar el fichero con las etiquetas
     data = pd.read_csv(dataset_path + 'metadata.csv')
     
-    # Create the DataFrame with two columns -> image path | label (0:benign, 1:melanoma)
+    # Crear DataFrame con dos columnas -> ruta de la imagen | etiqueta (0:nevus, 1:melanoma)
     class_map = {'nevus': "nevus", 'melanoma': "melanoma"}
-# Create the DataFrame with two columns -> image path | label (0:benign, 1:melanoma)
     new_data = pd.DataFrame({
         'x_col': data['isic_id'].apply(lambda x: os.path.join(dataset_path, x + '.jpg')),
         'y_col': data['diagnosis'].apply(lambda x: class_map[x] if x in class_map else 3)
@@ -119,15 +118,15 @@ def load_data():
     # Combinar y mezclar los datos seleccionados
     new_data = pd.concat([melanoma_data, benign_data]).sample(frac=1, random_state=seed).reset_index(drop=True)
 
-    # Tarin Test Separation -> 90% Train and 10% Test
+    # Separacion Train Test -> 90% Train and 10% Test
     train_data, test_data = train_test_split(new_data, test_size=0.10, random_state=42, stratify=new_data['y_col'])
 
-    # Create the real-time image data generator -> Apply normalization + Train Test Split (20% Validation and 80% Train)
+    # Crear el generador de datos de imagen en tiempo real -> Aplicar la normalización + Train Test Split (20% Validación y 80% Train)
     datagen = ImageDataGenerator(rescale=1./255., validation_split=0.20)
 
-    batch_size = 64 # Lo ponen a 128 pero con 100 imagenes no puedo ponerlo a tanto!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    batch_size = 64 
 
-    # Training data generator
+    # Generador de datos de entrenamiento
     train_generator = datagen.flow_from_dataframe(
         dataframe=train_data,
         x_col='x_col',
@@ -140,7 +139,7 @@ def load_data():
         shuffle=True
     )
 
-    # Validation data generator
+    # Generador de datos de validacion
     validation_generator = datagen.flow_from_dataframe(
         dataframe=train_data,
         x_col='x_col',
@@ -153,6 +152,7 @@ def load_data():
         shuffle=True
     )
     
+    # Generador de datos de test
     test_generator = ImageDataGenerator(rescale=1.0 / 255.0).flow_from_dataframe(
         dataframe=test_data,
         x_col='x_col',
@@ -169,22 +169,23 @@ def load_data():
 
 def main():
 
-
-    # No se si hace falta para el dataset final -> tengo dos archivos csv porque me he descargado por separado las img benignas y las malignas -> concateno los csv !!!!!!!!!!!!!!!!!!!!!!!!!
-    # Load data from the two CSV files
+    # Cargar los datos 
     train, validation, test = load_data()
     
     print(test.labels)
 
-    # For transfer learning
-    #model = Vgg16Model(pretrained=True)
+    # Entrenamiento con transfer learning
+    # model = Vgg16Model(pretrained=True)
 
-    # For normal training
+    # Entrenamiento desde 0
     model = Vgg16Model(pretrained=False)
 
     history = model.train(train, validation)
-    #model = load_model('./ISIC-images/modelVVG.h5')
-    ## TRAIN ACCURACY
+
+    # Cargar el modelo
+    # model = load_model('./ISIC-images/modelVVG.h5')
+    
+    ## ACCURACY ENTRENAMIENTO
     '''
     train_accuracy = history.history['accuracy']
     val_accuracy = history.history['val_accuracy']
