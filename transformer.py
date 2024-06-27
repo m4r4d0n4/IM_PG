@@ -109,10 +109,10 @@ criterion = nn.CrossEntropyLoss()
 # Optimizer
 optimizer = optim.Adam(model.parameters(), lr=lr)
 
-# Learning Rate Scheduler for Optimizer:
+# Learning Rate Scheduler:
 scheduler = StepLR(optimizer, step_size=1, gamma=gamma)
 
-# Training:
+# Entrenar:
 for epoch in range(epochs):
     epoch_loss = 0
     epoch_accuracy = 0
@@ -162,20 +162,7 @@ model.load_state_dict(torch.load(PATH))
 # Rendimiento
 def overall_accuracy(model, test_loader, criterion):
     
-    '''
-    Model testing 
-    
-    Args:
-        model: model used during training and validation
-        test_loader: data loader object containing testing data
-        criterion: loss function used
-    
-    Returns:
-        test_loss: calculated loss during testing
-        accuracy: calculated accuracy during testing
-        y_proba: predicted class probabilities
-        y_truth: ground truth of testing data
-    '''
+
     
     y_proba = []
     y_truth = []
@@ -208,20 +195,10 @@ print(f"Accuracy: {acc}")
 
 print(pd.value_counts(y_truth))
 
-#ROC curve:
+#Curva ROC:
 
 def plot_ROCAUC_curve(y_truth, y_proba, fig_size):
-    
-    '''
-    Plots the Receiver Operating Characteristic Curve (ROC) and displays Area Under the Curve (AUC) score.
-    
-    Args:
-        y_truth: ground truth for testing data output
-        y_proba: class probabilties predicted from model
-        fig_size: size of the output pyplot figure
-    
-    Returns: void
-    '''
+
     
     fpr, tpr, threshold = roc_curve(y_truth, y_proba)
     auc_score = roc_auc_score(y_truth, y_proba)
@@ -246,13 +223,13 @@ y_true = []
 net = model
 # Iteramos los datos de test
 for inputs, labels in test_loader:
-        output = net(inputs) # Feed Network
+        output = net(inputs) 
 
         output = (torch.max(torch.exp(output), 1)[1]).data.cpu().numpy()
-        y_pred.extend(output) # Save Prediction
+        y_pred.extend(output) 
         
         labels = labels.data.cpu().numpy()
-        y_true.extend(labels) # Save Truth
+        y_true.extend(labels) 
 
 # Clases
 classes = ('Benign', 'Melanoma')
