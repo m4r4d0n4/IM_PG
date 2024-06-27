@@ -16,11 +16,16 @@ import torch.utils.data as data
 import torchvision
 from torchvision.transforms import ToTensor
 import torchvision.transforms as transforms
+from sklearn.model_selection import train_test_split
+import os, sys
+from torch.utils.data import Dataset, DataLoader
+from torchvision.io import read_image
+
 torch.cuda.is_available()
 
 # Hyperparameters:
 batch_size = 64 
-epochs = 20
+epochs = 200
 lr = 3e-5
 gamma = 0.7
 seed = 142
@@ -28,29 +33,75 @@ IMG_SIZE = 128
 patch_size = 16
 num_classes = 2
 
+dataset_path = "./ISIC-images"
+data = pd.read_csv( "./ISIC-images/metadata.csv")
+class_map = {'nevus': 0, 'melanoma': 1}
+# label (0:benign, 1:melanoma)
+new_data = pd.DataFrame({
+    'x_col': data['isic_id'].apply(lambda x: os.path.join(dataset_path, x + '.jpg')),
+    'y_col': data['diagnosis'].apply(lambda x: class_map[x] if x in class_map else 3)
+})
+
+# Seleccionar 3000 filas con 1 y 3000 filas con 0
+melanoma_data = new_data[new_data['y_col'] == 1].sample(n=3000, random_state=seed)
+benign_data = new_data[new_data['y_col'] == 0].sample(n=3000, random_state=seed)
+
+# Combinar y mezclar los datos seleccionados
+new_data = pd.concat([melanoma_data, benign_data]).sample(frac=1, random_state=seed).reset_index(drop=True)
+
+class CustomImageDataset(Dataset):
+    def __init__(self, annotations_file, img_dir, transform=None, target_transform=None):
+
+        self.img_labels = annotations_file
+        self.img_dir = img_dir
+        self.transform = transform
+        self.target_transform = target_transform
+
+    def __len__(self):
+        return len(self.img_labels)
+
+    def __getitem__(self, idx):
+        img_name = os.path.join(".", self.img_labels.iloc[idx, 0])
+        image = read_image(img_name)
+        image = transforms.ToPILImage()(image)
+        label = self.img_labels.iloc[idx, 1]
+        
+        if self.transform:
+            image = self.transform(image)
+            
+        if self.target_transform:
+            label = self.target_transform(label)
+        
+        return image, label
+
+# Transformaciones
 transform = transforms.Compose([
-    transforms.Resize((128, 128)),
-    transforms.ToTensor()
+    transforms.Resize((IMG_SIZE, IMG_SIZE)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-# Tensor Transforms (with Augmentation) and Pytorch Preprocessing:
-train_ds = torchvision.datasets.ImageFolder("dataset/train", transform=transform)
-valid_ds = torchvision.datasets.ImageFolder("dataset/val", transform=transform)
-test_ds = torchvision.datasets.ImageFolder("dataset/test", transform=transform)
+# Cargar el dataset completo
+dataset = CustomImageDataset(new_data, dataset_path, transform=transform)
 
-# Data Loaders:
-train_loader = data.DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=0)
-valid_loader = data.DataLoader(valid_ds, batch_size=batch_size, shuffle=True,  num_workers=0)
-test_loader  = data.DataLoader(test_ds, batch_size=batch_size, shuffle=True, num_workers=0)
+# Dividir el dataset en train, val y test
+train_size = 0.70
+val_size = 0.15
+test_size = 0.15
+train_ds, temp_ds = train_test_split(dataset, test_size=1 - train_size, shuffle=False)
+val_ds, test_ds = train_test_split(temp_ds, test_size=test_size/(test_size + val_size), shuffle=False)
+train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=False, num_workers=4,pin_memory=True)
+test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=4,pin_memory=True)
+valid_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=4,pin_memory=True)
 
 # Training device:
 device = 'cuda'
 
 # Linear Transformer:
-efficient_transformer = Linformer(dim=128, seq_len=64+1, depth=12, heads=8, k=64)
+efficient_transformer = Linformer(dim=IMG_SIZE, seq_len=65, depth=12, heads=8, k=64)
 
 # Vision Transformer Model: 
-model = ViT(dim=128, image_size=128, patch_size=patch_size, num_classes=num_classes, transformer=efficient_transformer, channels=3).to(device)
+model = ViT(dim=IMG_SIZE, image_size=IMG_SIZE, patch_size=patch_size, num_classes=num_classes, transformer=efficient_transformer, channels=3).to(device)
 
 # loss function
 criterion = nn.CrossEntropyLoss()
@@ -65,10 +116,9 @@ scheduler = StepLR(optimizer, step_size=1, gamma=gamma)
 for epoch in range(epochs):
     epoch_loss = 0
     epoch_accuracy = 0
-    for data, label in tqdm(train_loader):
+    for data, label in train_loader:
         data = data.to(device)
         label = label.to(device)
-        #print(data.shape)
         output = model(data)
         loss = criterion(output, label)
 
@@ -100,16 +150,16 @@ for epoch in range(epochs):
         f"Epoch : {epoch+1} - loss : {epoch_loss:.4f} - acc: {epoch_accuracy:.4f} - val_loss : {epoch_val_loss:.4f} - val_acc: {epoch_val_accuracy:.4f}\n"
     )
 
-# Save Model:
+# Guardar Model:
 PATH = "epochs"+"_"+str(epochs)+"_"+"img"+"_"+str(IMG_SIZE)+"_"+"patch"+"_"+str(patch_size)+"_"+"lr"+"_"+str(lr)+".pt"
 torch.save(model.state_dict(), PATH)
-# load saved model:
+# Cargar Model:
 PATH = "epochs"+"_"+str(epochs)+"_"+"img"+"_"+str(IMG_SIZE)+"_"+"patch"+"_"+str(patch_size)+"_"+"lr"+"_"+str(lr)+".pt"
-efficient_transformer = Linformer(dim=128, seq_len=49+1, depth=12, heads=8, k=64)
-model = ViT(image_size=128, patch_size=32, num_classes=2, dim=128 ,transformer=efficient_transformer, channels=3)
+efficient_transformer = Linformer(dim=IMG_SIZE, seq_len=65, depth=12, heads=8, k=64)
+model = ViT(dim=IMG_SIZE, image_size=IMG_SIZE, patch_size=patch_size, num_classes=num_classes, transformer=efficient_transformer, channels=3)
 model.load_state_dict(torch.load(PATH))
 
-# Performance on Valid/Test Data
+# Rendimiento
 def overall_accuracy(model, test_loader, criterion):
     
     '''
@@ -158,7 +208,7 @@ print(f"Accuracy: {acc}")
 
 print(pd.value_counts(y_truth))
 
-# Plot ROC curve:
+#ROC curve:
 
 def plot_ROCAUC_curve(y_truth, y_proba, fig_size):
     
@@ -183,7 +233,7 @@ def plot_ROCAUC_curve(y_truth, y_proba, fig_size):
     plt.title("Receiver Operating Characteristic (ROC) Curve")
     plt.xlabel("False Positive Rate (FPR)")
     plt.ylabel("True Positive Rate (TPR)")
-#     plt.savefig('ROC.png')
+    plt.savefig('ROC.png')
 plot_ROCAUC_curve(y_truth, y_proba, (8, 8))
 
 from sklearn.metrics import confusion_matrix
@@ -194,7 +244,7 @@ y_pred = []
 y_true = []
 
 net = model
-# iterate over test data
+# Iteramos los datos de test
 for inputs, labels in test_loader:
         output = net(inputs) # Feed Network
 
@@ -204,13 +254,13 @@ for inputs, labels in test_loader:
         labels = labels.data.cpu().numpy()
         y_true.extend(labels) # Save Truth
 
-# constant for classes
-classes = ('cats', 'dogs')
+# Clases
+classes = ('Benign', 'Melanoma')
 
-# Build confusion matrix
+# Matriz de confusion
 cf_matrix = confusion_matrix(y_true, y_pred)
 df_cm = pd.DataFrame(cf_matrix/np.sum(cf_matrix), index = [i for i in classes],
                      columns = [i for i in classes])
 plt.figure(figsize = (12,7))
 sn.heatmap(df_cm, annot=True)
-# plt.savefig('cm.png')
+plt.savefig('cm.png')
